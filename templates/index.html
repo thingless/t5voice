@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+  <head>
+    <title>T5Voice</title>
+      <script type="text/javascript">
+'use strict';
+window.onload = (function(){
+    let audiodata;
+
+    let log = console.log.bind(console),
+      id = val => document.getElementById(val),
+      start = id('start'),
+      stop = id('stop'),
+      stream,
+      recorder,
+      chunks;
+
+    start.onclick = e => {
+      chunks = [];
+      navigator.mediaDevices.getUserMedia({audio:true}).then(_stream => {
+        stream = _stream;
+        start.disabled = true;
+        stop.removeAttribute('disabled');
+        recorder = new MediaRecorder(stream, {mimeType:"audio/ogg; codec=flac"});
+        recorder.ondataavailable = e => {
+          chunks.push(e.data);
+            if(recorder.state == 'inactive') {
+                audiodata = new Blob(chunks, {type: "audio/ogg; codec=flac"});
+                id("recording-ready").innerText = "Ready ✔️";
+            }
+        };
+        recorder.start();
+      }).catch(log);
+    }
+
+    stop.onclick = e => {
+      stop.disabled = true;
+      if (recorder)
+        recorder.stop();
+      if (stream)
+        stream.getTracks().forEach(t=>t.stop());
+      start.removeAttribute('disabled');
+    }
+
+    id('submit').onclick = e => {
+        const resptag = id("response");
+        Array.from(resptag.children).forEach(child=>resptag.removeChild(child));
+
+        const finput = id('file');
+        let data = new FormData();
+        data.append('text', id('text').value);
+
+        if (finput.files.length)
+            data.append('file', finput.files[0]);
+        else if (audiodata)
+            data.append('file', audiodata);
+
+        fetch("/gen", {
+            method: "POST",
+            body: data,
+        })
+        .then(resp=>resp.blob())
+        .then(blob=>{
+            const url = URL.createObjectURL(blob);
+            const mediatag = document.createElement("audio");
+            const linktag = document.createElement("a");
+
+            mediatag.controls = true;
+            mediatag.src = url;
+            linktag.href = url;
+            linktag.download = 't5voice.wav';
+            linktag.innerText = 'Download';
+            resptag.appendChild(mediatag);
+            resptag.appendChild(document.createElement("br"));
+            resptag.appendChild(linktag);
+        }).catch(log);
+    };
+});
+</script>
+  </head>
+  <body>
+    <h1>T5Voice</h1>
+    <label>wavfile: <input type="file" id="file" name="file"></label>
+    <p>OR</p>
+    <button id="start">Start Recording</button>
+    <button id="stop" disabled="disabled">Stop Recording</button>
+    <span id="recording-ready"></span>
+    <p>
+      <label for="text">Text</label><br/>
+      <textarea id="text" rows=24 cols=80 name="text"></textarea>
+    </p>
+    <button id="submit">Generate</button>
+    <div id="response"></div>
+  </body>
+</html>
